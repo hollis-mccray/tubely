@@ -1,10 +1,12 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -41,12 +43,24 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "Error handling request", err)
 		return
 	}
-	imageFiletype := header.Header.Get("Content-Type")
-	fmt.Println(imageFiletype)
 
-	imageData, err := io.ReadAll(file)
+	contentType := header.Header.Get("Content-Type")
+	extensions, err := mime.ExtensionsByType(contentType)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Error handling request", err)
+		respondWithError(w, http.StatusBadRequest, "Unrecognized file type", err)
+		return
+	}
+	imageExtension := extensions[0]
+
+	newPath := filepath.Join(cfg.assetsRoot, videoID.String()+imageExtension)
+	newFile, err := os.Create(newPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, newPath, err)
+		return
+	}
+
+	if _, err := io.Copy(newFile, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to create thumbnail 2", err)
 		return
 	}
 
@@ -60,8 +74,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "Unauthorized", err)
 	}
 
-	imageString := base64.StdEncoding.EncodeToString(imageData)
-	imageUrl := fmt.Sprintf("data:%s;base64,%s", imageFiletype, imageString)
+	imageUrl := fmt.Sprintf("http://localhost:8091/assets/%s%s", videoID.String(), imageExtension)
 
 	videoData.ThumbnailURL = &imageUrl
 
