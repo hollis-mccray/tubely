@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -45,14 +47,28 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	contentType := header.Header.Get("Content-Type")
+
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request", err)
+		return
+	}
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid image type", nil)
+		return
+	}
+
 	extensions, err := mime.ExtensionsByType(contentType)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unrecognized file type", err)
 		return
 	}
 	imageExtension := extensions[0]
+	key := make([]byte, 32)
+	rand.Read(key)
+	imageID := base64.RawURLEncoding.EncodeToString(key)
 
-	newPath := filepath.Join(cfg.assetsRoot, videoID.String()+imageExtension)
+	newPath := filepath.Join(cfg.assetsRoot, imageID+imageExtension)
 	newFile, err := os.Create(newPath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, newPath, err)
@@ -74,7 +90,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "Unauthorized", err)
 	}
 
-	imageUrl := fmt.Sprintf("http://localhost:8091/assets/%s%s", videoID.String(), imageExtension)
+	imageUrl := fmt.Sprintf("http://localhost:8091/assets/%s%s", imageID, imageExtension)
 
 	videoData.ThumbnailURL = &imageUrl
 
